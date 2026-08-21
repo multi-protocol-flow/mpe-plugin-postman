@@ -1,0 +1,127 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  test:
+    name: test (self-test)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+      - name: Run offline self-test
+        run: python3 postman.py --self-test
+
+  build:
+    name: build-${{ matrix.artifact_os }}
+    needs: test
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: ubuntu-22.04, artifact_os: linux-x64, bin: postman }
+          - { os: windows-latest, artifact_os: windows-x64, bin: postman.exe }
+          - { os: macos-latest, artifact_os: macos-x64, bin: postman }
+    steps:
+      - uses: actions/checkout@v7
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+      - name: Install PyInstaller
+        run: pip install pyinstaller
+      - name: Compute version
+        id: version
+        shell: bash
+        run: |
+          if [ "${{ github.ref_type }}" = "tag" ]; then
+            echo "value=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+          else
+            echo "value=dev-${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Inject version from tag
+        if: github.ref_type == 'tag'
+        shell: bash
+        run: |
+          python3 - "${{ steps.version.outputs.value }}" <<'EOF'
+          import json, sys
+          version = sys.argv[1]
+          with open("plugin.json", "r", encoding="utf-8") as f:
+              data = json.load(f)
+          data["version"] = version
+          with open("plugin.json", "w", encoding="utf-8") as f:
+              json.dump(data, f, ensure_ascii=False, indent=2)
+              f.write("\n")
+          EOF
+      - name: Build standalone binary via PyInstaller
+        run: pyinstaller --onefile --name postman postman.py
+      - name: Test compiled binary
+        shell: bash
+        run: |
+          ./dist/${{ matrix.bin }} --self-test
+      - name: Package zip + sha256
+        shell: bash
+        run: |
+          VERSION=${{ steps.version.outputs.value }}
+          mkdir -p pkg/postman
+          cp plugin.json pkg/postman/
+          cp dist/${{ matrix.bin }} pkg/postman/
+          python3 - "$VERSION" "${{ matrix.artifact_os }}" "${{ matrix.bin }}" <<'EOF'
+          import hashlib, json, os, sys, zipfile
+          version, artifact_os, bin_name = sys.argv[1], sys.argv[2], sys.argv[3]
+          if artifact_os != "windows-x64":
+              os.chmod(f"pkg/postman/{bin_name}", 0o755)
+          else:
+              # Windows: pin the entry to the explicit .exe name so the host's
+              # CreateProcess never has to guess the extension when relaunching.
+              with open("pkg/postman/plugin.json", "r", encoding="utf-8") as f:
+                  manifest = json.load(f)
+              manifest["entry"]["command"] = "./postman.exe"
+              with open("pkg/postman/plugin.json", "w", encoding="utf-8") as f:
+                  json.dump(manifest, f, ensure_ascii=False, indent=2)
+                  f.write("\n")
+          name = f"postman-{version}-{artifact_os}.zip"
+          with zipfile.ZipFile(name, "w", zipfile.ZIP_DEFLATED) as z:
+              for f in ("plugin.json", bin_name):
+                  z.write(f"pkg/postman/{f}", f"postman/{f}")
+          digest = hashlib.sha256(open(name, "rb").read()).hexdigest()
+          open(f"{name}.sha256", "w").write(f"{digest}  {name}\n")
+          EOF
+      - uses: actions/upload-artifact@v7
+        with:
+          name: plugin-${{ matrix.artifact_os }}
+          path: |
+            postman-*.zip
+            postman-*.zip.sha256
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          path: dist-release
+          merge-multiple: true
+      - uses: softprops/action-gh-release@v3.0.2
+        with:
+          files: dist-release/*
+      - name: Trigger registry sync
+        if: env.GH_TOKEN != ''
+        env:
+          GH_TOKEN: ${{ secrets.MPE_REGISTRY_TOKEN }}
+        run: gh workflow run sync.yml --repo multi-protocol-flow/mpe-plugin-registry --ref main

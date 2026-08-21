@@ -1,0 +1,13 @@
+{
+  "name": "postman",
+  "version": "0.1.0",
+  "kind": "datasource",
+  "description": "Postman 数据源（OpenAPI 云端工作空间 + 本地集合文件导入）",
+  "min_host_version": "0.1.0",
+  "entry": {
+    "command": "./postman"
+  },
+  "capabilities": {
+    "streaming": false
+  }
+}
