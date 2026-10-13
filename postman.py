@@ -354,7 +354,7 @@ def convert_postman_request_to_template(
                     headers[k] = str(v)
 
     node_data: Dict[str, Any] = {
-        "type": "http",
+        "type": "http:request",
         "url": full_url,
         "method": method_lower,
         "headers": headers if headers else None,
@@ -369,7 +369,7 @@ def convert_postman_request_to_template(
     template_name = name if name else (f"{method_upper} {full_url}" if full_url else "HTTP Request")
 
     return {
-        "type_id": "http",
+        "type_id": "http:request",
         "name": template_name,
         "data": {k: v for k, v in node_data.items() if v is not None},
         "source_ref": {
@@ -802,7 +802,7 @@ def describe_result() -> Dict[str, Any]:
     return {
         "plugin": {
             "name": "postman",
-            "version": "0.1.0",
+            "version": "0.1.1",
             "kind": "datasource",
             "description": "Postman 数据源（OpenAPI 云端工作空间 + 本地集合文件导入）",
             "entry": get_plugin_entry(),
@@ -1035,7 +1035,7 @@ def run_self_test() -> int:
             profile_req["raw"],
             collection_auth={"type": "bearer", "bearer": [{"key": "token", "value": "test_tok"}]},
         )
-        assert tpl_profile["type_id"] == "http"
+        assert tpl_profile["type_id"] == "http:request"
         assert tpl_profile["data"]["method"] == "get"
         assert tpl_profile["data"]["url"] == "https://api.example.com/v1/users/me"
         assert tpl_profile["data"]["auth"]["auth_type"] == "bearer"
@@ -1181,7 +1181,7 @@ def run_self_test() -> int:
 
             # Test template conversion: Nested with query filtering & basic auth
             tpl_nested = convert_postman_request_to_template(nested["id"], nested["raw"], datasource_id="postman_file")
-            assert tpl_nested["type_id"] == "http"
+            assert tpl_nested["type_id"] == "http:request"
             assert tpl_nested["data"]["auth"]["auth_type"] == "basic"
             assert tpl_nested["data"]["auth"]["username"] == "my_user"
             assert tpl_nested["data"]["auth"]["password"] == "my_pass"
