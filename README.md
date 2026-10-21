@@ -139,3 +139,7 @@ Pushing a `v*` tag (e.g. `v0.1.0`) triggers GitHub Actions to:
 3. Package `.zip` distributions and `.sha256` checksums;
 4. Publish a GitHub Release;
 5. Trigger registry sync with `multi-protocol-flow/mpe-plugin-registry`.
+
+## License
+
+MIT — see [LICENSE](./LICENSE).

@@ -151,3 +151,7 @@ python3 postman.py
 3. 打包各平台独立分发包（`postman-<version>-<platform>.zip` 及 `.sha256` 校验和）；
 4. 发布 GitHub Release；
 5. 自动触发 `multi-protocol-flow/mpe-plugin-registry` 仓库工作流，完成官方插件市场注册表的同步与更新。
+
+## 许可证
+
+MIT，详见 [LICENSE](./LICENSE)。
